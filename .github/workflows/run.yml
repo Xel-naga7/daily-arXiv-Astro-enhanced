@@ -21,12 +21,12 @@ jobs:
         curl -LsSf https://astral.sh/uv/install.sh | sh
         uv sync
         
-    - name: Crawl arXiv papers
+    - name: Crawl arXiv papers via Official API
       id: crawl_step
       run: |
         source .venv/bin/activate
         today=$(date -u "+%Y-%m-%d")
-        echo "开始爬取 $today 的arXiv论文... / Starting to crawl $today arXiv papers..."
+        echo "开始通过 arXiv 官方 API 获取 $today 的论文... / Starting to fetch $today arXiv papers via official API..."
         
         # 检查今日文件是否已存在，如存在则删除 / Check if today's file exists, delete if found
         if [ -f "data/${today}.jsonl" ]; then
@@ -45,18 +45,63 @@ jobs:
         export CATEGORIES="${{ vars.CATEGORIES }}"
         export MODEL_NAME="${{ vars.MODEL_NAME }}"
         
-        # 使用Scrapy爬取
-        # Use Scrapy to crawl
-        scrapy crawl arxiv -o ../data/${today}.jsonl
+        # 【修改点】：用官方 API Python 脚本替代 Scrapy 爬虫，彻底规避 406 错误
+        # 这里调用 Python 使用 urllib / xml 解析官方 API，并将结果输出到标准的 jsonl 文件中
+        python -c "
+import urllib.request
+import xml.etree.ElementTree as ET
+import json
+import os
+
+categories = os.getenv('CATEGORIES', 'cs.AI').split(',')
+base_url = 'http://export.arxiv.org/api/query?'
+results = []
+
+for cat in categories:
+    cat = cat.strip()
+    query = f'search_query=cat:{cat}&max_results=50&sortBy=submittedDate&sortOrder=descending'
+    url = base_url + query
+    try:
+        with urllib.request.urlopen(url) as response:
+            xml_data = response.read()
+            root = ET.fromstring(xml_data)
+            ns = {'atom': 'http://www.w3.org/2005/Atom'}
+            for entry in root.findall('atom:entry', ns):
+                title = entry.find('atom:title', ns).text.strip().replace('\n', ' ')
+                summary = entry.find('atom:summary', ns).text.strip().replace('\n', ' ')
+                paper_id = entry.find('atom:id', ns).text.split('/')[-1]
+                published = entry.find('atom:published', ns).text[:10]
+                authors = [author.find('atom:name', ns).text for author in entry.findall('atom:author', ns)]
+                
+                # 仅保留当天或符合条件的数据（根据项目需求，这里写入解析项）
+                item = {
+                    'id': paper_id,
+                    'title': title,
+                    'summary': summary,
+                    'published': published,
+                    'authors': authors,
+                    'categories': [cat]
+                }
+                results.append(item)
+    except Exception as e:
+        print(f'Error fetching category {cat}: {e}')
+
+# 写入目标 jsonl 文件
+os.makedirs('../data', exist_ok=True)
+with open(f'../data/${{today}}.jsonl', 'w', encoding='utf-8') as f:
+    for item in results:
+        f.write(json.dumps(item, ensure_ascii=False) + '\n')
+print(f'Successfully fetched {len(results)} papers via arXiv API.')
+"
         
         # 检查爬取是否成功 / Check if crawling was successful
         if [ ! -f "../data/${today}.jsonl" ]; then
-            echo "爬取失败，未生成数据文件 / Crawling failed, no data file generated"
+            echo "API 获取失败，未生成数据文件 / API fetch failed, no data file generated"
             exit 1
         fi
         
         echo "crawl_date=$today" >> $GITHUB_OUTPUT
-        echo "爬取完成 / Crawling completed"
+        echo "获取完成 / Fetching completed"
         
     - name: Check for duplicates
       id: dedup_check

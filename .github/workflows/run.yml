@@ -47,7 +47,7 @@ jobs:
         
         # 修改：用官方 API Python 脚本替代 Scrapy 爬虫
         # arxiv.py 使用 urllib / xml 解析官方 API，并将结果输出到标准的 jsonl 文件中
-        python arxiv.py
+        python .github/workflows/arxiv.py
         
         # 检查爬取是否成功 / Check if crawling was successful
         if [ ! -f "../data/${today}.jsonl" ]; then

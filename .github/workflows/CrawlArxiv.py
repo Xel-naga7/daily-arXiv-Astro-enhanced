@@ -30,7 +30,6 @@ for cat in categories:
     
     search = arxiv.Search(
         query=f'cat:{cat}',
-        max_results=50,
         sort_by=arxiv.SortCriterion.SubmittedDate,
         sort_order=arxiv.SortOrder.Descending
     )

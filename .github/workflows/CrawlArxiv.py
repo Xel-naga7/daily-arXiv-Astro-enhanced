@@ -1,16 +1,22 @@
 import arxiv
 import feedparser
+import urllib.request
 import json
 import os
 
-# 1. 关键修复：全局设置 feedparser 的 User-Agent，防止 arXiv API 返回 406 错误
-feedparser.USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+# 1. 强行全局设置 User-Agent，绕过 arXiv 的 HTTP 406 限制
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+feedparser.USER_AGENT = USER_AGENT
 
-# 获取分类列表
-categories = os.getenv('CATEGORIES', 'astro-ph.HE,gr-qc').split(',')
+# 修改 urllib 默认请求头
+opener = urllib.request.build_opener()
+opener.addheaders = [('User-Agent', USER_AGENT)]
+urllib.request.install_opener(opener)
+
+# 2. 读取环境变量或分类列表
+categories = os.getenv('CATEGORIES').split(',')
 results = []
 
-# 2. 初始化 arxiv Client
 client = arxiv.Client(
     page_size=50,
     delay_seconds=3,
@@ -22,7 +28,6 @@ for cat in categories:
     if not cat:
         continue
     
-    # 构建查询
     search = arxiv.Search(
         query=f'cat:{cat}',
         max_results=50,
@@ -50,10 +55,17 @@ for cat in categories:
     except Exception as e:
         print(f'Error fetching category {cat}: {e}')
 
-# 保存结果
-os.makedirs('../data', exist_ok=True)
-with open('../data/${today}.jsonl', 'w', encoding='utf-8') as f:
-    for item in results:
-        f.write(json.dumps(item, ensure_ascii=False) + '\n')
-
-print(f'Successfully fetched {len(results)} papers via arxiv Python Client.')
+# 3. 只有当确实抓取到数据时才写入文件，确保 Workflow 不会因为空数据报错
+if results:
+    os.makedirs('../data', exist_ok=True)
+    today = os.getenv('TODAY', 'today') # 根据你的文件名变量配置
+    file_path = f'../data/{today}.jsonl'
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for item in results:
+            f.write(json.dumps(item, ensure_ascii=False) + '\n')
+            
+    print(f'Successfully fetched {len(results)} papers via arxiv Python Client.')
+else:
+    print('No papers were fetched from any category.')
+    exit(1) # 如果一个论文都没抓到，显式抛出错误供 Workflow 拦截

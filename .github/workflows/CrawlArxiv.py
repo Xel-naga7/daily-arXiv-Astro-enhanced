@@ -1,12 +1,16 @@
 import arxiv
+import feedparser
 import json
 import os
 
+# 1. 关键修复：全局设置 feedparser 的 User-Agent，防止 arXiv API 返回 406 错误
+feedparser.USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
 # 获取分类列表
-categories = os.getenv('CATEGORIES').split(',')
+categories = os.getenv('CATEGORIES', 'astro-ph.HE,gr-qc').split(',')
 results = []
 
-# 初始化 arxiv Client
+# 2. 初始化 arxiv Client
 client = arxiv.Client(
     page_size=50,
     delay_seconds=3,
@@ -18,7 +22,7 @@ for cat in categories:
     if not cat:
         continue
     
-    # 构建查询：按分类搜索并按提交时间倒序排列
+    # 构建查询
     search = arxiv.Search(
         query=f'cat:{cat}',
         max_results=50,
@@ -28,7 +32,6 @@ for cat in categories:
 
     try:
         for result in client.results(search):
-            # 格式化论文数据结构，保持与原格式一致
             paper_id = result.entry_id.split('/')[-1]
             title = result.title.replace('\n', ' ')
             summary = result.summary.replace('\n', ' ')
@@ -47,7 +50,7 @@ for cat in categories:
     except Exception as e:
         print(f'Error fetching category {cat}: {e}')
 
-# 保存数据
+# 保存结果
 os.makedirs('../data', exist_ok=True)
 with open('../data/${today}.jsonl', 'w', encoding='utf-8') as f:
     for item in results:

@@ -44,6 +44,7 @@ jobs:
         export LANGUAGE="${{ vars.LANGUAGE }}"
         export CATEGORIES="${{ vars.CATEGORIES }}"
         export MODEL_NAME="${{ vars.MODEL_NAME }}"
+        export TODAY="$today"
         
         # 修改：用官方 API Python 脚本替代 Scrapy 爬虫
         # arxiv.py 使用 urllib / xml 解析官方 API，并将结果输出到标准的 jsonl 文件中

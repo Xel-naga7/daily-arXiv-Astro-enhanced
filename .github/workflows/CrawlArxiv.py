@@ -87,6 +87,7 @@ for category in categories:
 
     category_count = 0
     inspected_count = 0
+    category_target_date = None
 
     try:
 
@@ -96,21 +97,22 @@ for category in categories:
 
             published_date = result.published.date()
 
-            # Results are sorted newest -> oldest.
-            #
-            # Once we reach papers older than the target date,
-            # there is no reason to request/process more results.
-            if published_date < target_date:
+            if published_date > target_date:
+                continue
+
+            if category_target_date is None:
+                category_target_date = published_date
+                print(
+                    f"[{category}] Using latest available date: "
+                    f"{category_target_date}"
+                )
+
+            if published_date < category_target_date:
                 print(
                     f"[{category}] Reached older papers "
                     f"({published_date}). Stop."
                 )
                 break
-
-            # Normally this should only happen if the target date
-            # is earlier than the newest papers.
-            if published_date > target_date:
-                continue
 
             paper_id = result.entry_id.rsplit("/", 1)[-1]
 

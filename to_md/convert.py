@@ -52,12 +52,21 @@ if __name__ == "__main__":
                     print(f"Skipping item '{item.get('title', 'Unknown')}' due to incomplete AI fields")
                     continue
                 
+                paper_url = item.get("abs")
+                if not paper_url:
+                    paper_id = item.get("id", "").strip()
+                    if paper_id:
+                        paper_url = f"https://arxiv.org/abs/{paper_id}"
+                    else:
+                        print(f"Skipping item '{item.get('title', 'Unknown')}' due to missing paper URL/id")
+                        continue
+
                 papers.append(
                     template.format(
                         title=item["title"],
                         authors=",".join(item["authors"]),
                         summary=item["summary"],
-                        url=item['abs'],
+                        url=paper_url,
                         tldr=ai_data.get('tldr', ''),
                         motivation=ai_data.get('motivation', ''),
                         method=ai_data.get('method', ''),

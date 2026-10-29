@@ -1,6 +1,8 @@
 import arxiv
 import json
 import os
+import re
+import subprocess
 import sys
 from datetime import datetime
 
@@ -48,6 +50,76 @@ print("=" * 60)
 
 
 # ============================================================
+# Historical deduplication
+# ============================================================
+
+def load_historical_paper_ids():
+    """Return base arXiv IDs already published in earlier daily files."""
+    git_ref = os.environ.get("HISTORICAL_DATA_REF", "").strip()
+    if not git_ref:
+        return set()
+
+    try:
+        file_list = subprocess.check_output(
+            [
+                "git",
+                "ls-tree",
+                "-r",
+                "--name-only",
+                git_ref,
+                "data",
+            ],
+            text=True,
+        ).splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(
+            f"WARNING: Could not inspect historical data from {git_ref}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return set()
+
+    historical_ids = set()
+    daily_file_pattern = re.compile(r"^data/\d{4}-\d{2}-\d{2}\.jsonl$")
+
+    for file_path in file_list:
+        if not daily_file_pattern.match(file_path):
+            continue
+
+        try:
+            content = subprocess.check_output(
+                ["git", "show", f"{git_ref}:{file_path}"],
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(
+                f"WARNING: Could not read historical file {file_path}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            if not line.strip():
+                continue
+
+            try:
+                item = json.loads(line)
+                paper_id = item.get("id", "").strip()
+                if paper_id:
+                    historical_ids.add(paper_id.split("v")[0])
+            except json.JSONDecodeError as exc:
+                print(
+                    f"WARNING: Ignoring invalid JSON in {file_path}:{line_number}: "
+                    f"{exc}"
+                )
+
+    print(
+        f"Historical deduplication: found {len(historical_ids)} "
+        "previously crawled papers."
+    )
+    return historical_ids
+
+
+# ============================================================
 # arXiv client
 # ============================================================
 
@@ -63,6 +135,8 @@ client = arxiv.Client(
 # ============================================================
 
 papers = {}
+historical_ids = load_historical_paper_ids()
+skipped_historical_count = 0
 failed_categories = []
 
 # Safety limit PER CATEGORY.
@@ -123,6 +197,10 @@ for category in categories:
             #
             # The stored ID itself is left unchanged.
             base_id = paper_id.split("v")[0]
+
+            if base_id in historical_ids:
+                skipped_historical_count += 1
+                continue
 
             if base_id in papers:
 
@@ -288,6 +366,10 @@ print(
 
 print(
     f"Unique papers    : {len(results)}"
+)
+
+print(
+    f"Skipped historical duplicates: {skipped_historical_count}"
 )
 
 print(

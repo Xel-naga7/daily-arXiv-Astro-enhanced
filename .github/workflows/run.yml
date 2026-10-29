@@ -72,6 +72,18 @@ jobs:
 
           export TODAY="$today"
 
+          # Fetch the previous data branch so the crawler can avoid
+          # publishing papers that already appeared on an earlier date.
+          if git ls-remote \
+              --exit-code \
+              --heads \
+              origin \
+              data >/dev/null 2>&1
+          then
+              git fetch --quiet origin data
+              export HISTORICAL_DATA_REF="origin/data"
+          fi
+
 
           # ------------------------------------------
           # Validate configuration
